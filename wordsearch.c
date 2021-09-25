@@ -9,7 +9,7 @@
 
 typedef struct scramble {
   char **data_sheet; /* multi dimensional dynamic array */
-  char **comp_sheet; /* sheet for comparison, 0 = no matching charm 1 = matching char */
+  char **comp_sheet; /* sheet for comparison, 0 = no matching char 1 = matching char, use char bc only need 1 bit (though we use a byte) */
   int rows;
   int cols;
 } Scramble;
@@ -21,20 +21,20 @@ typedef struct dictionary {
   long int loc; /* starting locaiton of the dictionary */
 } Dict;
 
-char **solve(Scramble *, Dict *);
+void solve(Scramble *, Dict *);
 void p_data(char **, int, int);
 Scramble *mk_scramble(FILE *, Scramble *);
 Dict *mk_dict(FILE *, Dict *, long int);
+void search(int, int, const Scramble *, direction, const char[MAX_DICT_WLEN]);
 
 int main(int argc, char * argv[]) {
-  int i;
+  int i, j;
   Scramble scramble; /* word scramble to search through */
   Dict dict; /* dictionary */
 	char input_file[FNAMELEN];
   char output_file[FNAMELEN];
   FILE* ifp = NULL;
   FILE* ofp = NULL;
-  char **solution = NULL;
 
   if (argc == 1) {
     /* ask user to enter some file names */
@@ -71,7 +71,13 @@ int main(int argc, char * argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  solution = solve(&scramble, &dict);
+  solve(&scramble, &dict);
+
+  for (i = 0; i < scramble.rows; i++) {
+    for (j = 0; j < scramble.cols; j++) {
+      fprintf(ofp, "%c", (scramble.data_sheet[i][j]));
+    }
+  }
 
   fclose(ifp);
   fclose(ofp);
@@ -89,31 +95,204 @@ int main(int argc, char * argv[]) {
 	return 0;
 }
 
-char **solve(Scramble *scramble, Dict *dict) {
-  int i, j, k;
+void solve(Scramble *scramble, Dict *dict) {
+  int i, j, k, l;
   char ch;
   char **sbl = scramble->data_sheet; /* short hand for the scramble data sheet */
   char **cmp = scramble->comp_sheet; /* short hand for comparison sheet */
-  char **solution = NULL;
 
   /* For each row */
   for (i = 0; i < scramble->rows; i++) {
     /* For each column */
     for (j = 0; j < scramble->cols; j++) {
-      /* For each first char in each dictionary entry */
+      /* For each first char in each dictionary entry
+          Searching for a match to a first char */
       for (k = 0; k < dict->entries; k++) {
         if ((ch = sbl[i][j]) == dict->f_chars[k]) {
-          printf("First char found at %d,%d word num %d\n", i, j, k);
+          /* A first char from dict word was found 
+              Note that f_char index (k) corresponds to the dict entry index */
+          
+          /* NW is the last element in the directions enum */
+          for (l = 0; l <= NW; l++) {
+            search(i, j, scramble, (direction) l, dict->data[k]);
+          } 
         }        
       }
     }
   }
 
-  return solution;
+  for (i = 0; i < scramble->rows; i++) {
+    /* skip spaces, new line and final space */
+    for (j = 0; j <= (scramble->cols-3); j+=2) {
+      if (cmp[i][j] != '1') {
+        sbl[i][j] = ' ';
+      }
+    }
+  }
+
+  p_data(sbl, scramble->rows, scramble->cols);
 }
 
-int search(char **data, enum direction dir) {
+void search(int row, int col, const Scramble *scramble, direction dir, const char dict_word[MAX_DICT_WLEN]) {
+  int i, j, k;
+  char **sbl = scramble->data_sheet;
+  char **cmp = scramble->comp_sheet;
+  int start_row = row, start_col = col;
+  int wordlen = strlen(dict_word);
 
+  /* We have the word we are trying to match for, search until we either find a
+  non match char, or, if we find the entire word, mark the comp_sheet with 1s in 
+  'dir' direction */
+  switch (dir) {
+    case N:
+      /* increment and check by row until 0 */
+      for (i = 0; row >= 0; row--, i++) {
+        if (sbl[row][start_col] != dict_word[i]) {
+          /* no longer matches, break out and do nothing */
+          break;
+        } else {
+          /* matches */
+          if ((i+1) == wordlen) {
+            /* found a full word! Note that we know how long the word is, and our starting pos */
+            for (j = start_row; j >= row; j--)
+              cmp[j][start_col] = '1';
+
+            break;
+          }
+        }
+      }
+      break;
+    case NE:
+      for (i = 0; col < (scramble->cols-3) && row >= 0; col+=2, row--, i++) {
+        /* skipping spaces by inc col by 2 - scramble->cols-1 is a newline char, -2 is a space */
+        if(sbl[row][col] != dict_word[i]) {
+          break;
+        } else {
+          if ((i+1) == wordlen) {
+            for (j = start_row, k = start_col; j >= row && k <= col; j--, k+=2) {
+              cmp[j][k] = '1';
+            }
+
+            break;
+          }
+        }
+      }
+      break;
+    case E:
+      for (i = 0; col < scramble->cols; col++, i++) {
+        if (sbl[start_row][col] == ' ') {
+          i-=1;
+          continue;
+        }
+
+        if(sbl[start_row][col] != dict_word[i]) {
+          break;
+        } else {
+          if ((i+1) == wordlen) {
+            for (j = start_col; j <= col; j++) {
+              if (sbl[start_row][j] == ' ') {
+                continue;
+              } else {
+                cmp[start_row][j] = '1';
+              }
+            }
+
+            break;
+          }
+        }
+      }
+      break;
+    case SE:
+      for (i = 0; col < (scramble->cols-3) && row < scramble->rows; col+=2, row++, i++) {
+        /* skipping spaces by inc col by 2 - scramble->cols-1 is a newline char, -2 is a space */
+        if(sbl[row][col] != dict_word[i]) {
+          break;
+        } else {
+          if ((i+1) == wordlen) {
+            for (j = start_row, k = start_col; j <= row && k <= col; j++, k+=2) {
+              cmp[j][k] = '1';
+            }
+
+            break;
+          }
+        }
+      }
+      break;
+    case S:
+      for (i = 0; row < scramble->rows; row++, i++) {
+        if (sbl[row][start_col] != dict_word[i]) {
+          break;
+        } else {
+          /* matches */
+          if ((i+1) == wordlen) {
+            /* found a full word! Note that we know how long the word is, and our starting pos */
+            for (j = start_row; j <= row; j++)
+              cmp[j][start_col] = '1';
+
+            break;
+          }
+        }
+      }
+      break;
+    case SW:
+      for (i = 0; col >= 0 && row < scramble->rows; col-=2, row++, i++) {
+        /* skipping spaces by inc col by 2 - scramble->cols-1 is a newline char, -2 is a space */
+        if(sbl[row][col] != dict_word[i]) {
+          break;
+        } else {
+          if ((i+1) == wordlen) {
+            for (j = start_row, k = start_col; j <= row && k >= col; j++, k-=2) {
+              cmp[j][k] = '1';
+            }
+
+            break;
+          }
+        }
+      }
+      break;
+    case W:
+      for (i = 0; col >= 0; col--, i++) {
+        if (sbl[start_row][col] == ' ') {
+          i-=1;
+          continue;
+        }
+
+        if(sbl[start_row][col] != dict_word[i]) {
+          break;
+        } else {
+          if ((i+1) == wordlen) {
+            for (j = start_col; j >= col; j--) {
+              if (sbl[start_row][j] == ' ') {
+                continue;
+              } else {
+                cmp[start_row][j] = '1';
+              }
+            }
+
+            break;
+          }
+        }
+      }
+      break;
+    case NW:
+      for (i = 0; col >= 0 && row >= 0; col-=2, row--, i++) {
+        /* skipping spaces by inc col by 2 - scramble->cols-1 is a newline char, -2 is a space */
+        if(sbl[row][col] != dict_word[i]) {
+          break;
+        } else {
+          if ((i+1) == wordlen) {
+            for (j = start_row, k = start_col; j >= row && k >= col; j--, k-=2) {
+              cmp[j][k] = '1';
+            }
+
+            break;
+          }
+        }
+      }
+      break;
+    default:
+      puts("Invalid search direction. This is a bug.");
+  }
 }
 
 Scramble *mk_scramble(FILE *fp, Scramble *scramble) {
@@ -161,10 +340,6 @@ Scramble *mk_scramble(FILE *fp, Scramble *scramble) {
 
     scramble->comp_sheet[index][scramble->cols-1] = '\n';
   }
-  
-  /* display so the scramble for funsies */
-  p_data(scramble->data_sheet, scramble->rows, scramble->cols);
-  p_data(scramble->comp_sheet, scramble->rows, scramble->cols);
 
   return scramble;
 }
@@ -185,8 +360,6 @@ Dict *mk_dict(FILE *fp, Dict *dict, long int f_loc) {
   /* allocate space for the first characters in each word */
   dict->f_chars = malloc(entries * sizeof(char));
 
-  printf("%d entries.", entries);
-
   /* rewind to start of dict */
   fseek(fp, f_loc, SEEK_SET);
 
@@ -196,7 +369,9 @@ Dict *mk_dict(FILE *fp, Dict *dict, long int f_loc) {
   for (index = 0; index < entries; index++) {
     ch = getc(fp);
     dict->f_chars[index] = ch;
+    dict->data[index][inner_index] = ch;
 
+    inner_index = 1;
     while ((ch = getc(fp)) != '\n') {
       dict->data[index][inner_index] = ch;
 
@@ -217,7 +392,7 @@ void p_data(char **data, int rows, int cols) {
   int index, inner_index;
   for (index = 0; index < rows; index++) {
     for (inner_index = 0; inner_index < cols; inner_index++) {
-      printf("%2c", data[index][inner_index]);
+      printf("%c", data[index][inner_index]);
     }
   }
 

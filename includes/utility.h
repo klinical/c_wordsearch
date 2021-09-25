@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum direction {N, NE, E, SE, S, SW, W, NW};
+typedef enum {N, NE, E, SE, S, SW, W, NW} direction;
 
 char* S_Gets(char* st, int maxlen);
 FILE* T_FOpen(const char* dest, const char* mode);

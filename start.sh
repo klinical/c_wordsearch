@@ -18,9 +18,8 @@ then
 	echo "Launching $program .. GLHF"
   
 	sleep 0.4
-	clear
 
-	./$program data/data1 take
+	./$program data/data1 attempt1
 else
 	echo "Make failed. start.sh will now stop."
 fi
