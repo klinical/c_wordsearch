@@ -129,8 +129,6 @@ void solve(Scramble *scramble, Dict *dict) {
       }
     }
   }
-
-  p_data(sbl, scramble->rows, scramble->cols);
 }
 
 void search(int row, int col, const Scramble *scramble, direction dir, const char dict_word[MAX_DICT_WLEN]) {
@@ -163,7 +161,7 @@ void search(int row, int col, const Scramble *scramble, direction dir, const cha
       }
       break;
     case NE:
-      for (i = 0; col < (scramble->cols-3) && row >= 0; col+=2, row--, i++) {
+      for (i = 0; col <= (scramble->cols-3) && row >= 0; col+=2, row--, i++) {
         /* skipping spaces by inc col by 2 - scramble->cols-1 is a newline char, -2 is a space */
         if(sbl[row][col] != dict_word[i]) {
           break;
@@ -203,7 +201,7 @@ void search(int row, int col, const Scramble *scramble, direction dir, const cha
       }
       break;
     case SE:
-      for (i = 0; col < (scramble->cols-3) && row < scramble->rows; col+=2, row++, i++) {
+      for (i = 0; col <= (scramble->cols-3) && row < scramble->rows; col+=2, row++, i++) {
         /* skipping spaces by inc col by 2 - scramble->cols-1 is a newline char, -2 is a space */
         if(sbl[row][col] != dict_word[i]) {
           break;
